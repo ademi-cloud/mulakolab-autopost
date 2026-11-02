@@ -1,0 +1,32 @@
+name: Perbaharui token Meta
+
+# Token IG dan Threads tamat selepas 60 hari. Workflow ini perbaharui setiap minggu
+# dan simpan token baru ke GitHub Secrets (perlu secret GH_PAT).
+on:
+  schedule:
+    - cron: '0 2 * * 1' # setiap Isnin, 10 pagi waktu Malaysia
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Perbaharui token
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+        run: node scripts/token.mjs refresh "$RUNNER_TEMP/token"
+
+      - name: Simpan ke GitHub Secrets
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh secret set IG_TOKEN --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/token/IG_TOKEN"
+          gh secret set THREADS_TOKEN --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/token/THREADS_TOKEN"
+          rm -rf "$RUNNER_TEMP/token"

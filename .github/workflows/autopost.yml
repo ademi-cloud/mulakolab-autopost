@@ -1,0 +1,48 @@
+name: Auto-post harian
+
+on:
+  schedule:
+    # 12:30 UTC = 8:30 malam waktu Malaysia (GitHub kadang lewat 5–20 minit)
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+    inputs:
+      hari:
+        description: 'Nombor hari (kosongkan untuk hari ini)'
+        required: false
+      dry_run:
+        description: 'Semak sahaja, jangan post'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autopost
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Post ke Instagram + Threads
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          HARI: ${{ inputs.hari }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: node scripts/post.mjs
+
+      - name: Simpan log post
+        if: always()
+        run: |
+          git config user.name "mulakolab-bot"
+          git config user.email "mulakolab-bot@users.noreply.github.com"
+          git add log/posted.json 2>/dev/null || true
+          git diff --cached --quiet || (git commit -m "Log post $(TZ=Asia/Kuala_Lumpur date +%F)" && git push)
