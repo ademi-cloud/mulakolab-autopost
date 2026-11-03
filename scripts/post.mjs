@@ -13,7 +13,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const IG_HOST = 'https://graph.instagram.com/' + (process.env.IG_API_VERSION || 'v26.0');
+// Token "EAA…" (System User dari Unified login) guna graph.facebook.com; token "IG…" guna graph.instagram.com
+const IG_FB = (process.env.IG_TOKEN || '').startsWith('EAA');
+const IG_HOST = IG_FB
+  ? 'https://graph.facebook.com/' + (process.env.IG_API_VERSION || 'v24.0')
+  : 'https://graph.instagram.com/' + (process.env.IG_API_VERSION || 'v26.0');
 const TH_HOST = 'https://graph.threads.com/' + (process.env.THREADS_API_VERSION || 'v1.0');
 const LOG_FILE = join(ROOT, 'log', 'posted.json');
 
@@ -87,8 +91,17 @@ async function igTunggu(id, token) {
   throw new Error(`Container ${id} tak siap selepas 5 minit`);
 }
 
+// ID akaun IG: IG_USER_ID jika diset; jika tidak, cari sendiri ikut jenis token
+async function igUserId(token) {
+  if (process.env.IG_USER_ID) return process.env.IG_USER_ID;
+  if (!IG_FB) return (await api('GET', `${IG_HOST}/me`, { fields: 'user_id', access_token: token })).user_id;
+  const { data } = await api('GET', `${IG_HOST}/me/assigned_instagram_accounts`, { access_token: token });
+  if (!data?.length) throw new Error('Tiada akaun Instagram di-assign kepada System User (Business Settings → System users → Assign assets)');
+  return data[0].id;
+}
+
 async function postInstagram(post, token) {
-  const { user_id } = await api('GET', `${IG_HOST}/me`, { fields: 'user_id,username', access_token: token });
+  const user_id = await igUserId(token);
   const media = () => `${IG_HOST}/${user_id}/media`;
   let containerId;
 

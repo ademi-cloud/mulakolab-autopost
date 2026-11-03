@@ -27,6 +27,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          gh secret set IG_TOKEN --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/token/IG_TOKEN"
-          gh secret set THREADS_TOKEN --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/token/THREADS_TOKEN"
+          for s in IG_TOKEN THREADS_TOKEN; do
+            if [ -f "$RUNNER_TEMP/token/$s" ]; then gh secret set "$s" --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/token/$s"; fi
+          done
           rm -rf "$RUNNER_TEMP/token"

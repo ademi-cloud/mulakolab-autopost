@@ -35,14 +35,30 @@ async function get(url) {
 
 const [cmd, folder] = process.argv.slice(2);
 
+// Token "EAA…" = System User (Unified login, tak tamat tempoh), guna graph.facebook.com
+const IG_FB = (process.env.IG_TOKEN || '').startsWith('EAA');
+const FB = 'https://graph.facebook.com/v24.0';
+
 if (cmd === 'semak') {
-  for (const [nama, url] of [
-    ['Instagram', `https://graph.instagram.com/me?fields=user_id,username&access_token=${process.env.IG_TOKEN}`],
-    ['Threads', `https://graph.threads.com/v1.0/me?fields=id,username&access_token=${process.env.THREADS_TOKEN}`],
-  ]) {
-    try { const j = await get(url); console.log(`${nama}: OK, @${j.username}`); }
-    catch (e) { console.log(`${nama}: GAGAL, ${e.message}`); process.exitCode = 1; }
-  }
+  try {
+    if (IG_FB) {
+      const t = `access_token=${process.env.IG_TOKEN}`;
+      const me = await get(`${FB}/me?fields=name&${t}`);
+      const { data } = await get(`${FB}/me/assigned_instagram_accounts?${t}`);
+      if (!data.length) throw new Error(`token sah (${me.name}) tapi tiada akaun Instagram di-assign`);
+      for (const a of data) {
+        const ig = await get(`${FB}/${a.id}?fields=username&${t}`).catch(() => ({}));
+        console.log(`Instagram: OK, @${ig.username || '?'} (IG_USER_ID ${a.id}), token System User tak tamat tempoh`);
+      }
+    } else {
+      const j = await get(`https://graph.instagram.com/me?fields=user_id,username&access_token=${process.env.IG_TOKEN}`);
+      console.log(`Instagram: OK, @${j.username} (IG_USER_ID ${j.user_id})`);
+    }
+  } catch (e) { console.log(`Instagram: GAGAL, ${e.message}`); process.exitCode = 1; }
+  try {
+    const j = await get(`https://graph.threads.com/v1.0/me?fields=id,username&access_token=${process.env.THREADS_TOKEN}`);
+    console.log(`Threads: OK, @${j.username}`);
+  } catch (e) { console.log(`Threads: GAGAL, ${e.message}`); process.exitCode = 1; }
 } else if (cmd === 'tukar-threads') {
   const j = await get(`https://graph.threads.com/access_token?grant_type=th_exchange_token&client_secret=${process.env.THREADS_APP_SECRET}&access_token=${process.env.THREADS_SHORT_TOKEN}`);
   console.log(`Token Threads 60 hari (tamat dalam ${Math.round(j.expires_in / 86400)} hari).`);
@@ -51,11 +67,17 @@ if (cmd === 'semak') {
 } else if (cmd === 'refresh') {
   if (!folder) throw new Error('Guna: node scripts/token.mjs refresh <folder>');
   mkdirSync(folder, { recursive: true });
-  const ig = await get(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${process.env.IG_TOKEN}`);
+  // Token System User (EAA…) tak tamat tempoh, jadi IG hanya diperbaharui untuk token jenis Instagram
+  if (IG_FB) {
+    console.log('IG: token System User, tak perlu diperbaharui.');
+  } else {
+    const ig = await get(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${process.env.IG_TOKEN}`);
+    writeFileSync(join(folder, 'IG_TOKEN'), ig.access_token);
+    console.log(`IG diperbaharui: ${Math.round(ig.expires_in / 86400)} hari.`);
+  }
   const th = await get(`https://graph.threads.com/refresh_access_token?grant_type=th_refresh_token&access_token=${process.env.THREADS_TOKEN}`);
-  writeFileSync(join(folder, 'IG_TOKEN'), ig.access_token);
   writeFileSync(join(folder, 'THREADS_TOKEN'), th.access_token);
-  console.log(`Token diperbaharui. IG: ${Math.round(ig.expires_in / 86400)} hari, Threads: ${Math.round(th.expires_in / 86400)} hari.`);
+  console.log(`Threads diperbaharui: ${Math.round(th.expires_in / 86400)} hari.`);
 } else {
   console.log('Guna: node scripts/token.mjs semak | tukar-threads | refresh <folder>');
 }
